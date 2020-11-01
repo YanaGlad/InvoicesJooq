@@ -1,0 +1,71 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'nu.studer.jooq' version '3.0.3'
+    id "org.flywaydb.flyway" version "6.0.0-beta2"
+}
+group 'org.example'
+version '1.0-SNAPSHOT'
+
+sourceCompatibility = 1.8
+
+mainClassName = 'Main'
+
+repositories {
+    mavenCentral()
+}
+
+
+
+dependencies {
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+    compile group: 'org.postgresql', name: 'postgresql', version: '42.2.17'
+    compile group: 'org.flywaydb', name: 'flyway-core', version: '7.0.2'
+    implementation 'org.jetbrains:annotations:13.0'
+    jooqRuntime 'org.postgresql:postgresql:42.2.6'
+
+    compile group: 'org.jooq', name: 'jooq', version: "3.14.0"
+    compile group: 'org.jooq', name: 'jooq-codegen', version: " 3.14.0"
+    compile group: 'org.jooq', name: 'jooq-meta', version: " 3.14.0"
+}
+
+flyway{
+    url = 'jdbc:postgresql://localhost:5432/Finance'
+    user = 'postgres'
+    password = 'money10'
+}
+
+jooq {
+    version = '3.11.11'
+    edition = 'OSS'
+    sample(sourceSets.main) {
+        jdbc {
+            driver = 'org.postgresql.Driver'
+            url = 'jdbc:postgresql://localhost:5432/Finance'
+            user = 'postgres'
+            password = 'money10'
+        }
+        generator {
+            name = 'org.jooq.codegen.DefaultGenerator'
+            strategy {
+                name = 'org.jooq.codegen.DefaultGeneratorStrategy'
+            }
+            database {
+                name = 'org.jooq.meta.postgres.PostgresDatabase'
+                inputSchema = 'public'
+            }
+            generate {
+                relations = true
+                deprecated = false
+                records = true
+                immutablePojos = false
+                daos = false
+                fluentSetters = true
+            }
+            target {
+                packageName = 'db'
+                directory = 'src/main/java'
+            }
+        }
+    }
+}
