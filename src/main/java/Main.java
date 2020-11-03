@@ -154,7 +154,7 @@ public final class Main {
                 System.out.println("Name: " + org.getName() + " inn: " + org.getInn() + " payment account: " + org.getPayment_account());
             }
 
-            List<Organization> chosenOrgs = chooseOrganizations(20, "nomenclature3", invoicePositionDao, invoiceDao, organizationDAO);
+            List<Organization> chosenOrgs = chooseOrganizations(connection,20, "nomenclature3" );
 
             System.out.println("поставщики с суммой поставленного товара выше указанного количества: ");
             for (Organization org : chosenOrgs) {
@@ -168,13 +168,13 @@ public final class Main {
             date = calendar.getTimeInMillis();
             Date date2 = new Date(date);
 
-            countTotal(date1, date2, invoiceDao, invoicePositionDao);
+            countTotal(connection, date1, date2);
 
             System.out.println("Средняя цена полученного товара за период");
-            System.out.println(countAveragePrice(invoiceDao, invoicePositionDao, date1, date2));
+            System.out.println(countAveragePrice(connection, date1, date2));
             System.out.println();
 
-            printOrganizationProducts(invoiceDao, invoicePositionDao, organizationDAO);
+            printOrganizationProducts(connection);
 
 
         } catch (SQLException e) {
@@ -185,48 +185,60 @@ public final class Main {
 
     //Вывести список товаров, поставленных организациями за период.
     // Если организация товары не поставляла, то она все равно должна быть отражена в списке.
-    public static void printOrganizationProducts(InvoiceDao invoiceDao, InvoicePositionDao invoicePositionDao, OrganizationDao organizationDAO) {
-        List<Invoice> invoice = invoiceDao.getAll();
-        List<Organization> organizations = organizationDAO.getAll();
+    public static void printOrganizationProducts(Connection connection) {
+        try (Statement stmt = connection.createStatement()) {
+            ResultSet items = stmt.executeQuery("SELECT * FROM public.\"Invoice\"");
 
-        for (Organization organization : organizations) {
-            System.out.println("Компания: " + organization.getName());
-            for (Invoice value : invoice) {
-                if (value.getOrganization_name().equals(organization.getName())) {
-                    System.out.println("Товар: " + invoicePositionDao.get(value.getId()).getNomenclature_name());
+            while (items.next()) {
+                System.out.println("Компания: " + items.getString(2));
+                try (ResultSet rs = stmt.executeQuery("SELECT nomenclature_name  count FROM public.\"InvoicePositions\" WHERE id = " + items.getString(0))) {
+                    System.out.println("Товар: " + rs.getString(0));
                 }
+
             }
-            System.out.println();
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
         }
 
     }
 
     //Рассчитать среднюю цену полученного товара за период
-    public static double countAveragePrice(InvoiceDao invoiceDao, InvoicePositionDao invoicePositionDao, Date date1, Date date2) {
+    public static double countAveragePrice(Connection connection, Date date1, Date date2) {
         double sum = 0, totalCount = 0;
-        List<InvoicePosition> invoices = invoicePositionDao.getAll();
-        for (InvoicePosition invoice : invoices) {
-            if (invoiceDao.get(invoice.getId()).getOrganization_date().before(date2) && invoiceDao.get(invoice.getId()).getOrganization_date().after(date1)) {
-                sum += invoice.getPrice(); //сумма полученного товара
-                totalCount++; //С товара
+        try (Statement stmt = connection.createStatement()) {
+            ResultSet invoice = stmt.executeQuery("SELECT * FROM public.\"Invoice\"");
+            while (invoice.next()) {
+                ResultSet position = stmt.executeQuery("SELECT * FROM public.\"InvoicePositions\" WHERE id = " + invoice.getInt(0));
+                if (invoice.getDate(1).before(date2) && invoice.getDate(1).after(date1)) {
+                    sum += position.getLong(3); //сумма полученного товара
+                    totalCount++; //С товара
+                }
             }
+
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
         }
         return sum / totalCount;
     }
 
     //За каждый день в разрезе номенклатур рассчитать количество
-    // и сумму полученного товара в указанном периоде, посчитать итоги за период
-    public static void countTotal(Date date1, Date date2, InvoiceDao invoiceDao, InvoicePositionDao
-            invoicePositionDao) {
+    // и сумму полученного товара всех организаций в указанном периоде, посчитать итоги за период
+    public static void countTotal(Connection connection, Date date1, Date date2) {
         int sum = 0, totalCount = 0;
-        List<Invoice> invoices = invoiceDao.getAll();
-        for (Invoice invoice : invoices) {
-            if (invoice.getOrganization_date().before(date2) && invoice.getOrganization_date().after(date1)) {
-                sum += invoicePositionDao.get(invoice.getId()).getPrice(); //сумма полученного товара
-                totalCount += invoicePositionDao.get(invoice.getId()).getCount(); //С товара
+        try (Statement stmt = connection.createStatement()) {
+            ResultSet invoice = stmt.executeQuery("SELECT * FROM public.\"Invoice\"");
+            while (invoice.next()) {
+                ResultSet position = stmt.executeQuery("SELECT * FROM public.\"InvoicePositions\" WHERE id = " + invoice.getInt(0));
+                if (invoice.getDate(1).before(date2) && invoice.getDate(1).after(date1)) {
+                    sum += position.getLong(3); //сумма полученного товара
+                    totalCount += position.getLong(3); //С товара
+                }
             }
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
         }
-        System.out.println("Сумма полученного товара: " + sum);
+
+        System.out.println("Сумма полученного товара за данный период: " + sum);
         System.out.println("Количество товара: " + totalCount);
 
     }
@@ -243,19 +255,6 @@ public final class Main {
                     return result;
                 }
             }
-        }
-        return null;
-    }
-
-
-    public static Organization findOrganisationByInvoicePositionOnly(InvoicePosition invoicePosition,
-                                                                     InvoiceDao invoiceDao,
-                                                                     OrganizationDao organizationDAO) {
-        Invoice inv = invoiceDao.get(invoicePosition.getId());
-        List<Organization> organizations = organizationDAO.getAll();
-        for (Organization organization : organizations) {
-            if (inv.getOrganization_name().equals(organization.getName()))
-                return organization;
         }
         return null;
     }
@@ -283,18 +282,20 @@ public final class Main {
     }
 
     //Выбрать поставщиков с суммой поставленного товара выше указанного количества
-    public static List<Organization> chooseOrganizations(int count, String name, InvoicePositionDao
-            invoicePositionDao,
-                                                         InvoiceDao invoiceDao, OrganizationDao organizationDAO) {
+    public static List<Organization> chooseOrganizations(Connection connection, int count, String name ) {
         List<Organization> result = new ArrayList<>();
-        List<InvoicePosition> allPos = invoicePositionDao.getAll();
-        for (InvoicePosition pos : allPos) {
-            if (pos.getNomenclature_name().equals(name) && pos.getCount() > count) {
-                result.add(findOrganisationByInvoicePositionOnly(pos, invoiceDao, organizationDAO));
+        try (Statement stmt = connection.createStatement()) {
+            ResultSet positions = stmt.executeQuery("SELECT * FROM public.\"InvoicePositions\"");
+            while (positions.next()) {
+                ResultSet invoice = stmt.executeQuery("SELECT * FROM public.\"Invoice\" WHERE id = " + positions.getInt(0));
+                if (positions.getString(2).equals(name) && positions.getLong(3) > count) {
+                    ResultSet org = stmt.executeQuery("SELECT * FROM public.\"Organization\" WHERE name = " + invoice.getString(2));
+                    result.add(new Organization(org.getString(0), org.getInt(1), org.getLong(2)));
+                }
             }
-
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
         }
-
         return result;
     }
 }
