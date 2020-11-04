@@ -154,7 +154,7 @@ public final class Main {
                 System.out.println("Name: " + org.getName() + " inn: " + org.getInn() + " payment account: " + org.getPayment_account());
             }
 
-            List<Organization> chosenOrgs = chooseOrganizations(connection,20, "nomenclature3" );
+            List<Organization> chosenOrgs = chooseOrganizations(connection, 20, "nomenclature3");
 
             System.out.println("поставщики с суммой поставленного товара выше указанного количества: ");
             for (Organization org : chosenOrgs) {
@@ -282,16 +282,21 @@ public final class Main {
     }
 
     //Выбрать поставщиков с суммой поставленного товара выше указанного количества
-    public static List<Organization> chooseOrganizations(Connection connection, int count, String name ) {
+    public static List<Organization> chooseOrganizations(Connection connection, int count, String name) {
         List<Organization> result = new ArrayList<>();
+
         try (Statement stmt = connection.createStatement()) {
-            ResultSet positions = stmt.executeQuery("SELECT * FROM public.\"InvoicePositions\"");
-            while (positions.next()) {
-                ResultSet invoice = stmt.executeQuery("SELECT * FROM public.\"Invoice\" WHERE id = " + positions.getInt(0));
-                if (positions.getString(2).equals(name) && positions.getLong(3) > count) {
-                    ResultSet org = stmt.executeQuery("SELECT * FROM public.\"Organization\" WHERE name = " + invoice.getString(2));
-                    result.add(new Organization(org.getString(0), org.getInt(1), org.getLong(2)));
+            ResultSet organisations = stmt.executeQuery("SELECT * FROM public.\"Organization\"");
+            while (organisations.next()) {
+                int total = 0;
+                ResultSet invoices = stmt.executeQuery("SELECT * FROM public.\"Invoice\" WHERE organization_name = "+ organisations.getString(0));
+                while (invoices.next()){
+                    ResultSet positions = stmt.executeQuery("SELECT * FROM public.\"InvoicePositions\" WHERE id = " + invoices.getInt(0));
+                    while (positions.next())
+                        total+=positions.getLong(3);
                 }
+                if(total>count)
+                    result.add(new Organization(organisations.getString(0), organisations.getInt(1), organisations.getLong(2)));
             }
         } catch (SQLException e) {
             System.out.println(e.getMessage());
